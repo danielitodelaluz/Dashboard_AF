@@ -2,256 +2,242 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Analyse interactive des résultats Cadets AF</title>
-  <!-- Chart.js & PapaParse CDN -->
+  <title>Dashboard Cadets Air France</title>
+
+  <!-- Librairies -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0 1rem 2rem;
-      background: #f5f7fb;
-    }
-    h1 {
-      text-align: center;
-      margin-top: 1.2rem;
-    }
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      justify-content: center;
-      margin: 1.5rem 0;
-    }
-    .chart-wrapper {
-      max-width: 1100px;
-      margin: 0 auto 2rem;
-      background: #fff;
-      border-radius: 0.75rem;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-      padding: 1.5rem;
-    }
-    canvas {
-      width: 100% !important;
-      height: 400px !important;
-    }
-    select, input[type="file"] {
-      padding: 0.4rem 0.7rem;
-      border-radius: 0.4rem;
-      border: 1px solid #ccc;
-      font-size: 1rem;
-    }
+    body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:0 1rem 3rem;background:#f5f7fb}
+    h1{text-align:center;margin-top:1.2rem}
+
+    .controls{display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;margin:1.5rem 0}
+    .chart-wrapper{max-width:1000px;margin:0 auto 2rem;background:#fff;border-radius:.75rem;
+                   box-shadow:0 4px 10px rgba(0,0,0,.08);padding:1.5rem}
+
+    /* lignes / barres */
+    canvas{width:100%!important;height:350px!important}
+
+    /* camemberts – cercle et taille raisonnable */
+    canvas.pie{aspect-ratio:1/1;width:100%!important;max-width:500px;height:auto!important;margin:0 auto;display:block}
+
+    select,input[type="file"],input[type="date"]
+           {padding:.5rem .8rem;border-radius:.4rem;border:1px solid #ccc;font-size:1rem}
+    select{min-width:260px;cursor:pointer}
+    label{display:flex;align-items:center;gap:.4rem}
+
+    #emptyNotice{color:#b00;text-align:center;margin-top:.5rem;display:none}
   </style>
 </head>
 <body>
-  <h1>Tableau de bord – Résultats Cadets Air France</h1>
+<h1>Tableau de bord – Résultats Cadets Air France</h1>
 
-  <div class="controls">
-    <input type="file" id="csvFile" accept=".csv" />
-    <label>
-      Exercice :
-      <select id="exerciseSelect"></select>
-    </label>
-  </div>
+<div class="controls">
+  <input type="file" id="csvFile" accept=".csv">
+  <label>Exercice :
+    <select id="exerciseSelect"></select>
+  </label>
+  <label>Start :
+    <input type="date" id="startDate">
+  </label>
+  <label>End :
+    <input type="date" id="endDate">
+  </label>
+</div>
+<p id="emptyNotice">Aucun exercice détecté : vérifie les en-têtes du CSV (test / Exercice …)</p>
 
-  <div class="chart-wrapper">
-    <h3>Score vs temps (exercice sélectionné)</h3>
-    <canvas id="lineChart"></canvas>
-  </div>
-
-  <div class="chart-wrapper">
-    <h3>Nombre de tests par catégorie</h3>
-    <canvas id="barChart"></canvas>
-  </div>
-
-  <div class="chart-wrapper">
-    <h3>Score moyen par semaine</h3>
-    <canvas id="weekChart"></canvas>
-  </div>
+<div class="chart-wrapper"><h3>Classe vs temps (exercice sélectionné)</h3><canvas id="classLineChart"></canvas></div>
+<div class="chart-wrapper"><h3>Score vs temps (exercice sélectionné)</h3><canvas id="scoreLineChart"></canvas></div>
+<div class="chart-wrapper"><h3>Classe moyenne par exercice</h3><canvas id="classAvgChart"></canvas></div>
+<div class="chart-wrapper"><h3>Nombre d’essais par exercice</h3><canvas id="attemptsChart"></canvas></div>
+<div class="chart-wrapper"><h3>Répartition des classes (exercice sélectionné)</h3><canvas id="classPieChart" class="pie"></canvas></div>
+<div class="chart-wrapper"><h3>Classe moyenne globale vs temps</h3><canvas id="globalClassChart"></canvas></div>
+<div class="chart-wrapper"><h3>Nombre de tests par jour</h3><canvas id="timeDayChart"></canvas></div>
+<div class="chart-wrapper"><h3>Répartition des tests par exercice</h3><canvas id="timeExerciseChart" class="pie"></canvas></div>
 
 <script>
+/* ---------- Dictionnaires ---------- */
 const CATEGORY_MAP = {
-  "Un mot sur deux": "Verbale",
-  "Pair ou impair": "Numérique",
-  "Psychomoteur psy0 AF cadet": "Psychomoteur",
-  "Formes et couleurs": "Attention",
-  "Airways": "Intellectuelle",
-  "M2 Back numérique": "Mémorisation",
-  "Séries logiques": "Intellectuelle",
-  "Billes": "Intellectuelle",
-  "Formes glissées - II": "Intellectuelle",
-  "Objets 3D": "Spatiale",
-  "Empilements": "Spatiale",
-  "Cubes 2D/3D - psy0 Air France": "Spatiale",
-  "Grilles de calculs": "Numérique",
-  "Boîtes à mots": "Verbale",
-  "Mots en étoile": "Verbale",
-  "Anglais présélection cadets Air France": "Anglais"
+  "Un mot sur deux":"Verbale","Pair ou impair":"Numérique",
+  "Psychomoteur psy0 AF cadet":"Psychomoteur","Formes et couleurs":"Attention",
+  "Airways":"Intellectuelle","M2 Back numérique":"Mémorisation",
+  "Séries logiques":"Intellectuelle","Billes":"Intellectuelle",
+  "Formes glissées - II":"Intellectuelle","Objets 3D":"Spatiale",
+  "Empilements":"Spatiale","Cubes 2D/3D - psy0 Air France":"Spatiale",
+  "Grilles de calculs":"Numérique","Boîtes à mots":"Verbale",
+  "Mots en étoile":"Verbale","Anglais présélection cadets Air France":"Anglais",
+  "Angles":"Spatiale","Voitures (séquentiel)":"Spatiale"
+};
+const MONTHS_FR = {
+  "janvier":"January","février":"February","mars":"March","avril":"April","mai":"May",
+  "juin":"June","juillet":"July","août":"August","septembre":"September",
+  "octobre":"October","novembre":"November","décembre":"December"
 };
 
-const monthsFr = {
-  "Janvier":"January","Février":"February","Mars":"March","Avril":"April","Mai":"May","Juin":"June","Juillet":"July","Août":"August","Septembre":"September","Octobre":"October","Novembre":"November","Décembre":"December"
-};
-
-const fileInput = document.getElementById('csvFile');
+/* ---------- Sélecteurs ---------- */
+const fileInput      = document.getElementById('csvFile');
 const exerciseSelect = document.getElementById('exerciseSelect');
-let lineChart, barChart, weekChart;
-let rawData = [];
+const startDateInput = document.getElementById('startDate');
+const endDateInput   = document.getElementById('endDate');
+const emptyNotice    = document.getElementById('emptyNotice');
+let charts = [], rawData = [];
 
-fileInput.addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (file) {
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: results => {
-        rawData = cleanData(results.data);
-        populateExerciseDropdown(rawData);
-        refreshCharts();
-      },
-      error: err => alert('Erreur de lecture CSV: ' + err.message)
-    });
-  }
+/* ---------- Lecture CSV ---------- */
+fileInput.addEventListener('change', e=>{
+  const file=e.target.files[0];
+  if(!file) return;
+  Papa.parse(file,{
+    header:true,skipEmptyLines:true,
+    complete:r=>{rawData=clean(r.data);populateExercise();refresh();},
+    error:err=>alert('Erreur CSV : '+err.message)
+  });
 });
 
-exerciseSelect.addEventListener('change', refreshCharts);
+/* ---------- Events ---------- */
+exerciseSelect.addEventListener('change', refresh);
+[startDateInput,endDateInput].forEach(inp=>inp.addEventListener('change', refresh));
 
-function cleanData(data) {
-  return data.map(row => {
-    // Nettoyage nom exercice & score
-    const test = (row.test || row.Exercice || '').trim();
-    const scoreStr = (row.score || row['Score (%)'] || '').toString().replace('%','').trim();
-    const score = parseFloat(scoreStr);
+/* ---------- Helpers ---------- */
+const frToDate = s=>{
+  const p=s.split(' ');
+  if(p.length>=4){
+    const [, day, moFr, year, time='00h00'] = p;
+    const mo = MONTHS_FR[moFr.toLowerCase()]||moFr;
+    return new Date(`${day} ${mo} ${year} ${time.replace('h',':')}`);
+  }
+  return new Date(s);
+};
 
-    // Conversion date
-    let date = null;
-    const rawDate = row.at || row.date || row.Date || '';
-    if (rawDate) {
-      const p = rawDate.toString().split(' ');
-      if (p.length >= 4) {
-        // ex : "samedi 12 Octobre 2024 14h52"
-        const day = p[1];
-        const monthEn = monthsFr[p[2]] || p[2];
-        const year = p[3];
-        const time = (p[4] || '00h00').replace('h', ':');
-        date = new Date(`${day} ${monthEn} ${year} ${time}`);
-      } else {
-        date = new Date(rawDate);
-      }
-    }
+function clean(rows){
+  return rows.map(r=>{
+    const k={}; Object.keys(r).forEach(key=>k[key.toLowerCase().trim()]=r[key]);
 
-    return {
-      test,
-      score,
-      date,
-      category: CATEGORY_MAP[test] || 'Autre'
-    };
-  }).filter(row => !isNaN(row.score) && row.date instanceof Date && !isNaN(row.date));
+    const test =(k['exercice']||k['test']||'').trim();
+    const score=parseFloat(String(k['score (%)']||k['score']||'').replace('%',''));
+    const cls  =parseInt(k['stanine']||k['classe']||k['class']||NaN);
+    const dateRaw=k['at']||k['date']||'';
+    const date=dateRaw?frToDate(dateRaw):null;
+
+    return {test,score,cls,date,cat:CATEGORY_MAP[test]||'Autre'};
+  })
+  .filter(d=>d.test&&d.date instanceof Date&& !isNaN(d.score)&& !isNaN(d.cls));
 }
 
-function populateExerciseDropdown(data) {
-  const uniqueTests = [...new Set(data.map(d => d.test))].sort();
-  exerciseSelect.innerHTML = uniqueTests.map(t => `<option value="${t}">${t}</option>`).join('');
+function populateExercise(){
+  const uniq=[...new Set(rawData.map(d=>d.test))].sort();
+  exerciseSelect.innerHTML='';
+  if(!uniq.length){
+    emptyNotice.style.display='block';
+    exerciseSelect.disabled=true;
+    return;
+  }
+  emptyNotice.style.display='none';
+  exerciseSelect.disabled=false;
+  uniq.forEach(t=>exerciseSelect.insertAdjacentHTML('beforeend',`<option value="${t}">${t}</option>`));
+  exerciseSelect.selectedIndex=0;
 }
 
-function refreshCharts() {
-  if (!rawData.length) return;
-  const selected = exerciseSelect.value || exerciseSelect.options[0].value;
+const inRange = d=>{
+  const s=startDateInput.value?new Date(startDateInput.value):null;
+  const e=endDateInput.value?new Date(endDateInput.value):null;
+  return (!s||d.date>=s)&&(!e||d.date<=e);
+};
+const clearCharts=()=>{charts.forEach(c=>c?.destroy());charts=[];};
+const newPie=(ctx,values,labels)=>new Chart(ctx,{
+  type:'pie',
+  data:{labels,datasets:[{data:values}]},
+  options:{responsive:true,maintainAspectRatio:true,aspectRatio:1}
+});
 
-  // --- Line chart data ---
-  const lineData = rawData.filter(d => d.test === selected).sort((a,b) => a.date - b.date);
-  const lineLabels = lineData.map(d => d.date.toLocaleDateString('fr-FR'));
-  const lineScores = lineData.map(d => d.score);
+/* ---------- Rafraîchissement ---------- */
+function refresh(){
+  if(!rawData.length||exerciseSelect.disabled) return;
+  const data=rawData.filter(inRange);
+  if(!data.length) return;
+  clearCharts();
 
-  // --- Bar chart data ---
-  const countsByCat = rawData.reduce((acc, cur) => {
-    acc[cur.category] = (acc[cur.category] || 0) + 1;
-    return acc;
-  }, {});
-  const barLabels = Object.keys(countsByCat);
-  const barValues = Object.values(countsByCat);
+  const sel=exerciseSelect.value;
+  const lData=data.filter(d=>d.test===sel).sort((a,b)=>a.date-b.date);
 
-  // --- Weekly average chart ---
-  const weeks = {};
-  rawData.forEach(d => {
-    const monday = new Date(d.date);
-    monday.setDate(monday.getDate() - ((monday.getDay()+6)%7)); // Monday start
-    const key = monday.toISOString().split('T')[0];
-    if (!weeks[key]) weeks[key] = { total:0, count:0, date:monday };
-    weeks[key].total += d.score;
-    weeks[key].count += 1;
+  /* 1. Classe vs temps */
+  charts.push(new Chart(
+    document.getElementById('classLineChart'),
+    {type:'line',
+     data:{labels:lData.map(d=>d.date.toLocaleDateString('fr-FR')),
+           datasets:[{label:`Classe – ${sel}`,data:lData.map(d=>d.cls),
+                      tension:.25,pointRadius:4,borderWidth:2}]},
+     options:{responsive:true,scales:{y:{beginAtZero:true,max:9}}}
+    }));
+
+  /* 2. Score vs temps */
+  charts.push(new Chart(
+    document.getElementById('scoreLineChart'),
+    {type:'line',
+     data:{labels:lData.map(d=>d.date.toLocaleDateString('fr-FR')),
+           datasets:[{label:`Score (%) – ${sel}`,data:lData.map(d=>d.score),
+                      tension:.25,pointRadius:4,borderWidth:2}]},
+     options:{responsive:true,scales:{y:{beginAtZero:true,max:100}}}
+    }));
+
+  /* 3 & 4 stats par exercice */
+  const byEx={};
+  data.forEach(d=>{byEx[d.test]??={sum:0,cnt:0};byEx[d.test].sum+=d.cls;byEx[d.test].cnt++;});
+  const exLabels=Object.keys(byEx).sort();
+  const clsAvg  =exLabels.map(k=>(byEx[k].sum/byEx[k].cnt).toFixed(2));
+  const attempts=exLabels.map(k=>byEx[k].cnt);
+
+  charts.push(new Chart(document.getElementById('classAvgChart'),
+    {type:'bar',
+     data:{labels:exLabels,datasets:[{label:'Classe moyenne',data:clsAvg}]},
+     options:{responsive:true}}));
+
+  charts.push(new Chart(document.getElementById('attemptsChart'),
+    {type:'bar',
+     data:{labels:exLabels,datasets:[{label:'Essais',data:attempts}]},
+     options:{responsive:true}}));
+
+  /* 5. Camembert classes (exercice sélectionné) */
+  const clsCount={}; lData.forEach(d=>clsCount[d.cls]=(clsCount[d.cls]||0)+1);
+  charts.push(newPie(
+    document.getElementById('classPieChart'),
+    Object.values(clsCount),
+    Object.keys(clsCount)
+  ));
+
+  /* 6. Classe moyenne globale vs temps */
+  const byDate={};
+  data.forEach(d=>{
+    const k=d.date.toISOString().split('T')[0];
+    byDate[k]??={sum:0,cnt:0,date:d.date};
+    byDate[k].sum+=d.cls; byDate[k].cnt++;
   });
-  const sortedWeeks = Object.values(weeks).sort((a,b)=>a.date-b.date);
-  const weekLabels = sortedWeeks.map(w => w.date.toLocaleDateString('fr-FR'));
-  const weekValues = sortedWeeks.map(w => (w.total / w.count).toFixed(1));
+  const dates=Object.values(byDate).sort((a,b)=>a.date-b.date);
+  charts.push(new Chart(document.getElementById('globalClassChart'),
+    {type:'line',
+     data:{labels:dates.map(o=>o.date.toLocaleDateString('fr-FR')),
+           datasets:[{label:'Classe moyenne globale',
+                      data:dates.map(o=>(o.sum/o.cnt).toFixed(2)),
+                      tension:.25,pointRadius:4,borderWidth:2}]},
+     options:{responsive:true,scales:{y:{beginAtZero:true,max:9}}}}));
 
-  // --- Create / Update Charts ---
-  if (lineChart) lineChart.destroy();
-  if (barChart) barChart.destroy();
-  if (weekChart) weekChart.destroy();
-
-  const ctxLine = document.getElementById('lineChart');
-  const ctxBar = document.getElementById('barChart');
-  const ctxWeek = document.getElementById('weekChart');
-
-  lineChart = new Chart(ctxLine, {
-    type: 'line',
-    data: {
-      labels: lineLabels,
-      datasets: [{
-        label: `Score (%) – ${selected}`,
-        data: lineScores,
-        tension: 0.25,
-        fill: false,
-        pointRadius: 4,
-        borderWidth: 2
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: true } },
-      scales: {
-        y: { beginAtZero: true, max: 100 }
-      }
-    }
+  /* 7. Tests par jour */
+  const byDay={}; data.forEach(d=>{
+    const k=d.date.toISOString().split('T')[0];
+    byDay[k]=(byDay[k]||0)+1;
   });
+  charts.push(new Chart(document.getElementById('timeDayChart'),
+    {type:'bar',
+     data:{labels:Object.keys(byDay).sort(),
+           datasets:[{label:'Tests',data:Object.values(byDay)}]},
+     options:{responsive:true}}));
 
-  barChart = new Chart(ctxBar, {
-    type: 'bar',
-    data: {
-      labels: barLabels,
-      datasets: [{
-        label: 'Tests',
-        data: barValues,
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } }
-    }
-  });
-
-  weekChart = new Chart(ctxWeek, {
-    type: 'line',
-    data: {
-      labels: weekLabels,
-      datasets: [{
-        label: 'Score moyen (%)',
-        data: weekValues,
-        tension: 0.25,
-        fill: false,
-        pointRadius: 4,
-        borderWidth: 2
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: true } },
-      scales: { y: { beginAtZero: true, max: 100 } }
-    }
-  });
+  /* 8. Répartition tests par exercice */
+  charts.push(newPie(
+    document.getElementById('timeExerciseChart'),
+    attempts,
+    exLabels
+  ));
 }
 </script>
 </body>
