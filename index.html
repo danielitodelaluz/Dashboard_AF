@@ -7,6 +7,9 @@
   <!-- Librairies -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- plugin heat-map (matrix) pour Chart.js v4 -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@4.4.0/dist/chartjs-chart-matrix.min.js"></script>
+
 
   <style>
     body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:0 1rem 3rem;background:#f5f7fb}
@@ -15,9 +18,32 @@
     /* Filtres */
     .controls{display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;margin:1.5rem 0}
 
+    
     /* Cartes graphiques */
     .chart-wrapper{max-width:950px;margin:0 auto 2rem;background:#fff;border-radius:.75rem;
                    box-shadow:0 4px 10px rgba(0,0,0,.08);padding:1.5rem}
+
+    /* Tableau récapitulatif */
+    .summary-wrapper {
+      max-width:950px;
+      margin:0 auto 2rem;
+      background:#fff;
+      border-radius:.75rem;
+      box-shadow:0 4px 10px rgba(0,0,0,.08);
+      padding:1.5rem;
+    }
+    .summary-table {
+      width:100%;
+      border-collapse:collapse;
+      text-align:center;
+    }
+    .summary-table th, .summary-table td {
+      padding:.5rem;
+      border:1px solid #ccc;
+    }
+    .summary-table th {
+      background:#eaeef5;
+    }
 
     /* Graphes ligne / barre → ratio 16:9 */
     canvas.plot{aspect-ratio:16/9;width:100%!important;height:auto!important}
@@ -50,7 +76,29 @@
     <input type="date" id="endDate" />
   </label>
 </div>
+<div class="summary-wrapper">
+  <table class="summary-table">
+    <thead>
+      <tr>
+        <th>Classe moyenne globale</th>
+        <th>Classe max globale</th>
+        <th>Tests semaine</th>
+        <th>% de tests ≥ classe 6</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td id="avgGlobalClass">–</td>
+        <td id="maxGlobalClass">–</td>
+        <td id="testsWeek">–</td>
+        <td id="pctTestsGE6">–</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 <p id="emptyNotice">Aucun exercice détecté : vérifie les en-têtes du CSV.</p>
+
+
 
 <div class="chart-wrapper"><h3>Classe vs temps (exercice sélectionné)</h3><canvas id="classLineChart"  class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Score vs temps (exercice sélectionné)</h3><canvas id="scoreLineChart"  class="plot"></canvas></div>
@@ -61,6 +109,7 @@
 <div class="chart-wrapper"><h3>Classe moyenne globale vs temps</h3><canvas id="globalClassChart" class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Nombre de tests par jour</h3><canvas id="timeDayChart"    class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Répartition des tests par exercice</h3><canvas id="timeExerciseChart" class="pie"></canvas></div>
+<div class="chart-wrapper"><h3>Forces &amp; faiblesses par grande catégorie</h3><canvas id="catRadarChart" class="pie"></canvas></div>
 
 <script>
 /* ---------- constantes ---------- */
@@ -160,10 +209,21 @@ const newPie = (ctx,values,labels) => new Chart(ctx,{
 
 /* ---------- refresh ---------- */
 function refresh(){
+
   if(!rawData.length || exerciseSelect.disabled) return;
   const data = rawData.filter(inRange);
   if(!data.length) return;
   clearCharts();
+  // Mise à jour du tableau récapitulatif
+  const avgGlobal = (data.reduce((sum, d) => sum + d.cls, 0) / data.length).toFixed(2);
+  const maxGlobal = Math.max(...data.map(d => d.cls));
+  const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  const testsWeek = data.filter(d => d.date >= oneWeekAgo).length;
+  const pctGE6 = ((data.filter(d => d.cls >= 6).length / data.length) * 100).toFixed(1);
+  document.getElementById('avgGlobalClass').textContent = avgGlobal;
+  document.getElementById('maxGlobalClass').textContent = maxGlobal;
+  document.getElementById('testsWeek').textContent = testsWeek;
+  document.getElementById('pctTestsGE6').textContent = pctGE6 + '%';
 
   /* ---------- exercice sélectionné ---------- */
   const sel = exerciseSelect.value;
@@ -242,6 +302,37 @@ function refresh(){
       options:{responsive:true}
   }));
 
+    /* ---------- radar par catégorie ---------- */
+    const byCat = {};
+    data.forEach(d => {
+      byCat[d.cat] ??= { sum: 0, cnt: 0 };
+      byCat[d.cat].sum += d.cls;
+      byCat[d.cat].cnt++;
+    });
+    const catLabels = Object.keys(byCat).sort();
+    const catMeans  = catLabels.map(k => (byCat[k].sum / byCat[k].cnt).toFixed(2));
+
+    charts.push(new Chart(
+      document.getElementById('catRadarChart'), {
+        type: 'radar',
+        data: {
+          labels: catLabels,
+          datasets: [{
+            label: 'Classe moyenne',
+            data: catMeans,
+            backgroundColor: palette[6] + "33",
+            borderColor: palette[6],
+            borderWidth: 2,
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: { r: { beginAtZero: true, min: 0, max: 9 } }
+        }
+      }
+    ));
+
   /* Camembert classes */
   const clsCount={}; selData.forEach(d=>clsCount[d.cls]=(clsCount[d.cls]||0)+1);
   charts.push(newPie(
@@ -261,7 +352,7 @@ function refresh(){
   const dates = Object.values(byDate).sort((a,b)=>a.date-b.date);
   charts.push(new Chart(
     document.getElementById('globalClassChart'),{
-      type:'line',
+      type:'line', 
       data:{labels:dates.map(o=>o.date.toLocaleDateString('fr-FR')),
             datasets:[{
               label:'Classe moyenne globale',
@@ -294,6 +385,7 @@ function refresh(){
     attempts,
     exLabels
   ));
+  
 }
 </script>
 </body>
