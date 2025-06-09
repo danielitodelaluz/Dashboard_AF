@@ -102,13 +102,12 @@
 
 <div class="chart-wrapper"><h3>Classe vs temps (exercice sélectionné)</h3><canvas id="classLineChart"  class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Score vs temps (exercice sélectionné)</h3><canvas id="scoreLineChart"  class="plot"></canvas></div>
-<div class="chart-wrapper"><h3>Classe moyenne par exercice</h3><canvas id="classAvgChart"   class="plot"></canvas></div>
-<div class="chart-wrapper"><h3>Classe maximale par exercice</h3><canvas id="maxClassChart"   class="plot"></canvas></div>
-<div class="chart-wrapper"><h3>Nombre d’essais par exercice</h3><canvas id="attemptsChart"   class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Répartition des classes (exercice sélectionné)</h3><canvas id="classPieChart"  class="pie"></canvas></div>
 <div class="chart-wrapper"><h3>Classe moyenne globale vs temps</h3><canvas id="globalClassChart" class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Nombre de tests par jour</h3><canvas id="timeDayChart"    class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Répartition des tests par exercice</h3><canvas id="timeExerciseChart" class="pie"></canvas></div>
+<div class="chart-wrapper"><h3>Classe moyenne & classe maximale par exercice</h3><canvas id="exStatsChart" class="plot"></canvas></div>
+<div class="chart-wrapper"><h3>Essais par exercice</h3><canvas id="exAttemptsChart" class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Forces &amp; faiblesses par grande catégorie</h3><canvas id="catRadarChart" class="pie"></canvas></div>
 
 <script>
@@ -268,38 +267,47 @@ function refresh(){
     byEx[d.test].max = Math.max(byEx[d.test].max,d.cls);
   });
   const exLabels = Object.keys(byEx).sort();
-  const clsAvg   = exLabels.map(k=> (byEx[k].sum/byEx[k].cnt).toFixed(2));
+  const clsAvg   = exLabels.map(k => +(byEx[k].sum / byEx[k].cnt).toFixed(2));
   const clsMax   = exLabels.map(k=> byEx[k].max );
   const attempts = exLabels.map(k=> byEx[k].cnt );
 
-  /* Classe moyenne */
+  /* Histogramme : classe moyenne & classe maximale */
   charts.push(new Chart(
-    document.getElementById('classAvgChart'),{
+    document.getElementById('exStatsChart'),{
       type:'bar',
-      data:{labels:exLabels,datasets:[{label:'Classe moyenne',
-                                       data:clsAvg,
-                                       backgroundColor:palette[2]}]},
-      options:{responsive:true}
+      data:{
+        labels: exLabels,
+        datasets:[
+          { label:'Classe moyenne',
+            data: clsAvg,
+            backgroundColor: palette[2] },
+          { label:'Classe maximale',
+            data: clsMax,
+            backgroundColor: RED }
+        ]
+      },
+      options:{
+        responsive:true,
+        scales:{ y:{ beginAtZero:true } }
+      }
   }));
 
-  /* Classe maximale (rouge) */
+  /* Histogramme : essais par exercice */
   charts.push(new Chart(
-    document.getElementById('maxClassChart'),{
+    document.getElementById('exAttemptsChart'),{
       type:'bar',
-      data:{labels:exLabels,datasets:[{label:'Classe maximale',
-                                       data:clsMax,
-                                       backgroundColor:RED}]},
-      options:{responsive:true}
-  }));
-
-  /* Essais */
-  charts.push(new Chart(
-    document.getElementById('attemptsChart'),{
-      type:'bar',
-      data:{labels:exLabels,datasets:[{label:'Essais',
-                                       data:attempts,
-                                       backgroundColor:palette[3]}]},
-      options:{responsive:true}
+      data:{
+        labels: exLabels,
+        datasets:[
+          { label:'Essais',
+            data: attempts,
+            backgroundColor: palette[3] }
+        ]
+      },
+      options:{
+        responsive:true,
+        scales:{ y:{ beginAtZero:true } }
+      }
   }));
 
     /* ---------- radar par catégorie ---------- */
