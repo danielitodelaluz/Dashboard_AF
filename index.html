@@ -10,7 +10,7 @@
   <!-- plugin heat-map (matrix) pour Chart.js v4 -->
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@4.4.0/dist/chartjs-chart-matrix.min.js"></script>
 
-
+    
   <style>
     body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:0 1rem 3rem;background:#f5f7fb}
     h1{text-align:center;margin-top:1.2rem}
@@ -69,6 +69,13 @@
   <label>Exercice :
     <select id="exerciseSelect"></select>
   </label>
+  <label>Phase :
+    <select id="phaseSelect">
+      <option value="all">Toutes</option>
+      <option value="psy0">Psy 0</option>
+      <option value="psy1">Psy 1</option>
+    </select>
+  </label>
   <label>Start :
     <input type="date" id="startDate" />
   </label>
@@ -76,52 +83,60 @@
     <input type="date" id="endDate" />
   </label>
 </div>
-<div class="summary-wrapper">
-  <table class="summary-table">
-    <thead>
-      <tr>
-        <th>Classe moyenne globale</th>
-        <th>Classe max globale</th>
-        <th>Tests semaine</th>
-        <th>% de tests ≥ classe 6</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td id="avgGlobalClass">–</td>
-        <td id="maxGlobalClass">–</td>
-        <td id="testsWeek">–</td>
-        <td id="pctTestsGE6">–</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
 <p id="emptyNotice">Aucun exercice détecté : vérifie les en-têtes du CSV.</p>
 
 
 
 <div class="chart-wrapper"><h3>Classe vs temps (exercice sélectionné)</h3><canvas id="classLineChart"  class="plot"></canvas></div>
-<div class="chart-wrapper"><h3>Score vs temps (exercice sélectionné)</h3><canvas id="scoreLineChart"  class="plot"></canvas></div>
-<div class="chart-wrapper"><h3>Répartition des classes (exercice sélectionné)</h3><canvas id="classPieChart"  class="pie"></canvas></div>
-<div class="chart-wrapper"><h3>Classe moyenne globale vs temps</h3><canvas id="globalClassChart" class="plot"></canvas></div>
-<div class="chart-wrapper"><h3>Nombre de tests par jour</h3><canvas id="timeDayChart"    class="plot"></canvas></div>
-<div class="chart-wrapper"><h3>Répartition des tests par exercice</h3><canvas id="timeExerciseChart" class="pie"></canvas></div>
+<div class="chart-wrapper"><h3>Classe vs nombre d'essais (exercice sélectionné)</h3><canvas id="scoreLineChart"  class="plot"></canvas></div>
+<!-- <div class="chart-wrapper"><h3>Répartition des classes (exercice sélectionné)</h3><canvas id="classPieChart"  class="pie"></canvas></div> -->
+<!-- <div class="chart-wrapper"><h3>Classe moyenne globale vs temps</h3><canvas id="globalClassChart" class="plot"></canvas></div> -->
+<!-- <div class="chart-wrapper"><h3>Répartition des tests par exercice</h3><canvas id="timeExerciseChart" class="pie"></canvas></div> -->
 <div class="chart-wrapper"><h3>Classe moyenne & classe maximale par exercice</h3><canvas id="exStatsChart" class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Essais par exercice</h3><canvas id="exAttemptsChart" class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Forces &amp; faiblesses par grande catégorie</h3><canvas id="catRadarChart" class="pie"></canvas></div>
+<div class="chart-wrapper"><h3>Nombre de tests par jour</h3><canvas id="timeDayChart"    class="plot"></canvas></div>
 
 <script>
 /* ---------- constantes ---------- */
+/* Phase (psy0 / psy1) par test */
+const PSY_PHASE_MAP = {
+  "Un mot sur deux":"psy0","Pair ou impair":"psy0","M2 Back numérique":"psy0",
+  "Psychomoteur psy0 AF cadet":"psy0","Formes et couleurs":"psy0","Airways":"psy0",
+  "Empilements":"psy0","Objets 3D":"psy0","Billes":"psy0","Formes glissées - II":"psy0",
+  "Cubes 2D/3D - psy0 Air France":"psy0","Grilles de calculs":"psy0","Boîtes à mots":"psy0",
+  "Mots en étoile":"psy0","Angles":"psy1","Séries logiques":"psy0",
+  "Anglais présélection cadets Air France":"psy0",
+
+  "Mathématiques":"psy1","Voitures (séquentiel)":"psy1","Voitures (basique)":"psy1",
+  "Test des compteurs":"psy1","Calcul mental 1":"psy1","Calcul mental 4":"psy1",
+  "Calcul mental 2":"psy1","Attention 3":"psy1","Calcul mental 3":"psy1",
+  "Memory 3 Back":"psy1","Memory 4 Back":"psy1","Memory 5 Back":"psy1",
+  "Attention 1":"psy1","Attention 2":"psy1",
+  "Patrons de cubes - psy1 - Cadets AF":"psy1",
+  "DLR/AF Cadets psy1 - VLR - Orientation spatiale":"psy1","Tangram":"psy1",
+  "Psychomoteur ENAC":"psy1","EFG":"psy1","Matrices de Raven":"psy1","Lecture de textes":"psy1"
+};
+
+/* Catégorie principale par test */
 const CATEGORY_MAP = {
-  "Un mot sur deux":"Verbale","Pair ou impair":"Numérique",
+  "Un mot sur deux":"Verbale","Pair ou impair":"Numérique","M2 Back numérique":"Mémorisation",
   "Psychomoteur psy0 AF cadet":"Psychomoteur","Formes et couleurs":"Attention",
-  "Airways":"Intellectuelle","M2 Back numérique":"Mémorisation",
-  "Séries logiques":"Intellectuelle","Billes":"Intellectuelle",
-  "Formes glissées - II":"Intellectuelle","Objets 3D":"Spatiale",
-  "Empilements":"Spatiale","Cubes 2D/3D - psy0 Air France":"Spatiale",
-  "Grilles de calculs":"Numérique","Boîtes à mots":"Verbale",
-  "Mots en étoile":"Verbale","Anglais présélection cadets Air France":"Anglais",
-  "Angles":"Spatiale","Voitures (séquentiel)":"Spatiale"
+  "Airways":"Intellectuelle","Empilements":"Spatiale","Objets 3D":"Spatiale",
+  "Billes":"Intellectuelle","Formes glissées - II":"Intellectuelle",
+  "Cubes 2D/3D - psy0 Air France":"Spatiale","Grilles de calculs":"Numérique",
+  "Boîtes à mots":"Verbale","Mots en étoile":"Verbale","Angles":"Spatiale",
+  "Séries logiques":"Intellectuelle","Anglais présélection cadets Air France":"Anglais",
+
+  "Mathématiques":"Numérique","Voitures (séquentiel)":"Spatiale","Voitures (basique)":"Spatiale",
+  "Test des compteurs":"Numérique","Calcul mental 1":"Numérique","Calcul mental 2":"Numérique",
+  "Calcul mental 3":"Numérique","Calcul mental 4":"Numérique",
+  "Attention 1":"Attention","Attention 2":"Attention","Attention 3":"Attention",
+  "Memory 3 Back":"Mémorisation","Memory 4 Back":"Mémorisation","Memory 5 Back":"Mémorisation",
+  "Patrons de cubes - psy1 - Cadets AF":"Spatiale",
+  "DLR/AF Cadets psy1 - VLR - Orientation spatiale":"Spatiale","Tangram":"Spatiale",
+  "Psychomoteur ENAC":"Psychomoteur","EFG":"Intellectuelle",
+  "Matrices de Raven":"Intellectuelle","Lecture de textes":"Verbale"
 };
 const MONTHS_FR = {
   "janvier":"January","février":"February","mars":"March","avril":"April","mai":"May",
@@ -135,6 +150,7 @@ const RED = "#e74c3c";
 /* ---------- éléments DOM ---------- */
 const fileInput      = document.getElementById('csvFile');
 const exerciseSelect = document.getElementById('exerciseSelect');
+const phaseSelect    = document.getElementById('phaseSelect');
 const startDateInput = document.getElementById('startDate');
 const endDateInput   = document.getElementById('endDate');
 const emptyNotice    = document.getElementById('emptyNotice');
@@ -155,6 +171,10 @@ fileInput.addEventListener('change', e=>{
 /* ---------- events ---------- */
 exerciseSelect.addEventListener('change', refresh);
 [startDateInput,endDateInput].forEach(inp=>inp.addEventListener('change', refresh));
+phaseSelect.addEventListener('change', () => {
+  populateExercise();
+  refresh();
+});
 
 /* ---------- helpers ---------- */
 const frToDate = s=>{
@@ -175,13 +195,25 @@ function clean(rows){
     const cls  =parseInt(k['stanine']||k['classe']||k['class']||NaN);
     const dateRaw=k['at']||k['date']||'';
     const date = dateRaw ? frToDate(dateRaw) : null;
-    return {test,score,cls,date,cat:CATEGORY_MAP[test]||'Autre'};
+    return {
+      test,
+      score,
+      cls,
+      date,
+      cat: CATEGORY_MAP[test] || 'Autre',
+      phase: PSY_PHASE_MAP[test] || 'unknown'
+    };
   })
   .filter(d=>d.test && d.date instanceof Date && !isNaN(d.score) && !isNaN(d.cls));
 }
 
 function populateExercise(){
-  const uniq=[...new Set(rawData.map(d=>d.test))].sort();
+  const p = phaseSelect.value || 'all';
+  const uniq = [...new Set(
+    rawData
+      .filter(d => p === 'all' || d.phase === p)
+      .map(d => d.test)
+  )].sort();
   exerciseSelect.innerHTML='';
   if(!uniq.length){
     emptyNotice.style.display='block';
@@ -210,19 +242,11 @@ const newPie = (ctx,values,labels) => new Chart(ctx,{
 function refresh(){
 
   if(!rawData.length || exerciseSelect.disabled) return;
-  const data = rawData.filter(inRange);
+  const data = rawData
+    .filter(inRange)
+    .filter(d => phaseSelect.value === 'all' || d.phase === phaseSelect.value);
   if(!data.length) return;
   clearCharts();
-  // Mise à jour du tableau récapitulatif
-  const avgGlobal = (data.reduce((sum, d) => sum + d.cls, 0) / data.length).toFixed(2);
-  const maxGlobal = Math.max(...data.map(d => d.cls));
-  const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  const testsWeek = data.filter(d => d.date >= oneWeekAgo).length;
-  const pctGE6 = ((data.filter(d => d.cls >= 6).length / data.length) * 100).toFixed(1);
-  document.getElementById('avgGlobalClass').textContent = avgGlobal;
-  document.getElementById('maxGlobalClass').textContent = maxGlobal;
-  document.getElementById('testsWeek').textContent = testsWeek;
-  document.getElementById('pctTestsGE6').textContent = pctGE6 + '%';
 
   /* ---------- exercice sélectionné ---------- */
   const sel = exerciseSelect.value;
@@ -243,20 +267,27 @@ function refresh(){
       options:{responsive:true,scales:{y:{beginAtZero:true,max:9}}}
   }));
 
-  /* score vs temps */
+  /* classe vs nombre d'essais */
+  const classCounts = {};
+  selData.forEach(d => classCounts[d.cls] = (classCounts[d.cls] || 0) + 1);
+  const orderedClasses = Object.keys(classCounts).sort((a, b) => a - b);
   charts.push(new Chart(
-    document.getElementById('scoreLineChart'),{
-      type:'line',
-      data:{labels:selData.map(d=>d.date.toLocaleDateString('fr-FR')),
-            datasets:[{
-              label:`Score (%) – ${sel}`,
-              data:selData.map(d=>d.score),
-              borderColor:palette[1],
-              backgroundColor:palette[1]+"33",
-              tension:.25,pointRadius:4,borderWidth:2
-            }]},
-      options:{responsive:true,scales:{y:{beginAtZero:true,max:100}}}
-  }));
+    document.getElementById('scoreLineChart'), {
+      type: 'bar',
+      data: {
+        labels: orderedClasses,
+        datasets: [{
+          label: `Nombre d'essais par classe – ${sel}`,
+          data: orderedClasses.map(k => classCounts[k]),
+          backgroundColor: palette[1]
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true } }
+      }
+    }
+  ));
 
   /* ---------- stats par exercice ---------- */
   const byEx={};
@@ -341,36 +372,15 @@ function refresh(){
       }
     ));
 
-  /* Camembert classes */
-  const clsCount={}; selData.forEach(d=>clsCount[d.cls]=(clsCount[d.cls]||0)+1);
-  charts.push(newPie(
-    document.getElementById('classPieChart'),
-    Object.values(clsCount),
-    Object.keys(clsCount)
-  ));
+  // /* Camembert classes */
+  // const clsCount={}; selData.forEach(d=>clsCount[d.cls]=(clsCount[d.cls]||0)+1);
+  // charts.push(newPie(
+  //   document.getElementById('classPieChart'),
+  //   Object.values(clsCount),
+  //   Object.keys(clsCount)
+  // ));
 
   /* Classe moyenne globale vs temps */
-  const byDate={};
-  data.forEach(d=>{
-    const k=d.date.toISOString().split('T')[0];
-    byDate[k] ??= {sum:0,cnt:0,date:d.date};
-    byDate[k].sum += d.cls;
-    byDate[k].cnt ++;
-  });
-  const dates = Object.values(byDate).sort((a,b)=>a.date-b.date);
-  charts.push(new Chart(
-    document.getElementById('globalClassChart'),{
-      type:'line', 
-      data:{labels:dates.map(o=>o.date.toLocaleDateString('fr-FR')),
-            datasets:[{
-              label:'Classe moyenne globale',
-              data:dates.map(o=>(o.sum/o.cnt).toFixed(2)),
-              borderColor:palette[4],
-              backgroundColor:palette[4]+"33",
-              tension:.25,pointRadius:4,borderWidth:2
-            }]},
-      options:{responsive:true,scales:{y:{beginAtZero:true,max:9}}}
-  }));
 
   /* Tests par jour */
   const byDay={}; data.forEach(d=>{
@@ -387,12 +397,12 @@ function refresh(){
       options:{responsive:true}
   }));
 
-  /* Répartition tests par exercice */
-  charts.push(newPie(
-    document.getElementById('timeExerciseChart'),
-    attempts,
-    exLabels
-  ));
+  // /* Répartition tests par exercice */
+  // charts.push(newPie(
+  //   document.getElementById('timeExerciseChart'),
+  //   attempts,
+  //   exLabels
+  // ));
   
 }
 </script>
