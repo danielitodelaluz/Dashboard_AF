@@ -23,6 +23,27 @@
     .chart-wrapper{max-width:950px;margin:0 auto 2rem;background:#fff;border-radius:.75rem;
                    box-shadow:0 4px 10px rgba(0,0,0,.08);padding:1.5rem}
 
+    /* Légende classes */
+    .class-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      margin: 0.5rem 0 1rem;
+    }
+    .class-legend-item {
+      display: flex;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+    .class-legend-color {
+      width: 1rem;
+      height: 1rem;
+      margin-right: 0.25rem;
+      border: 1px solid #ccc;
+      border-radius: 2px;
+    }
+
     /* Tableau récapitulatif */
     .summary-wrapper {
       max-width:950px;
@@ -62,6 +83,20 @@
   </style>
 </head>
 <body>
+<!-- Template légende classes -->
+<template id="classLegendTemplate">
+  <div class="class-legend">
+    <div class="class-legend-item"><span class="class-legend-color" style="background:#e74c3c"></span>1</div>
+    <div class="class-legend-item"><span class="class-legend-color" style="background:#e67e22"></span>2</div>
+    <div class="class-legend-item"><span class="class-legend-color" style="background:#d35400"></span>3</div>
+    <div class="class-legend-item"><span class="class-legend-color" style="background:#f1c40f"></span>4</div>
+    <div class="class-legend-item"><span class="class-legend-color" style="background:#ffeb3b"></span>5</div>
+    <div class="class-legend-item"><span class="class-legend-color" style="background:#bfc531"></span>6</div>
+    <div class="class-legend-item"><span class="class-legend-color" style="background:#2ecc71"></span>7</div>
+    <div class="class-legend-item"><span class="class-legend-color" style="background:#3498db"></span>8</div>
+    <div class="class-legend-item"><span class="class-legend-color" style="background:#2c3e50"></span>9</div>
+  </div>
+</template>
 <h1>Tableau de bord – Résultats Cadets Air France</h1>
 
 <div class="controls">
@@ -89,13 +124,56 @@
 
 <div class="chart-wrapper"><h3>Classe vs temps (exercice sélectionné)</h3><canvas id="classLineChart"  class="plot"></canvas></div>
 <div class="chart-wrapper"><h3>Classe vs nombre d'essais (exercice sélectionné)</h3><canvas id="scoreLineChart"  class="plot"></canvas></div>
+<div class="chart-legend-container">
+  <!-- Cloner la légende -->
+  <div id="legend-for-scoreLineChart"></div>
+  <!--
+  <script>
+    (function() {
+      const tmpl = document.getElementById('classLegendTemplate');
+      const parent = document.getElementById('legend-for-scoreLineChart');
+      parent.appendChild(tmpl.content.cloneNode(true));
+    })();
+  </script>
+  -->
+</div>
 <!-- <div class="chart-wrapper"><h3>Répartition des classes (exercice sélectionné)</h3><canvas id="classPieChart"  class="pie"></canvas></div> -->
 <!-- <div class="chart-wrapper"><h3>Classe moyenne globale vs temps</h3><canvas id="globalClassChart" class="plot"></canvas></div> -->
 <!-- <div class="chart-wrapper"><h3>Répartition des tests par exercice</h3><canvas id="timeExerciseChart" class="pie"></canvas></div> -->
 <div class="chart-wrapper"><h3>Classe moyenne & classe maximale par exercice</h3><canvas id="exStatsChart" class="plot"></canvas></div>
+<div class="chart-legend-container">
+  <!-- Cloner la légende -->
+  <div id="legend-for-exStatsChart"></div>
+  <!--
+  <script>
+    (function() {
+      const tmpl = document.getElementById('classLegendTemplate');
+      const parent = document.getElementById('legend-for-exStatsChart');
+      parent.appendChild(tmpl.content.cloneNode(true));
+    })();
+  </script>
+  -->
+</div>
 <div class="chart-wrapper"><h3>Essais par exercice</h3><canvas id="exAttemptsChart" class="plot"></canvas></div>
+<div class="chart-legend-container">
+  <!-- Cloner la légende -->
+  <div id="legend-for-exAttemptsChart"></div>
+  <!--
+  <script>
+    (function() {
+      const tmpl = document.getElementById('classLegendTemplate');
+      const parent = document.getElementById('legend-for-exAttemptsChart');
+      parent.appendChild(tmpl.content.cloneNode(true));
+    })();
+  </script>
+  -->
+</div>
 <div class="chart-wrapper"><h3>Forces &amp; faiblesses par grande catégorie</h3><canvas id="catRadarChart" class="pie"></canvas></div>
 <div class="chart-wrapper"><h3>Nombre de tests par jour</h3><canvas id="timeDayChart"    class="plot"></canvas></div>
+<div class="chart-wrapper">
+  <h3>Tests par jour – Moyenne mobile 7 jours</h3>
+  <canvas id="testsTrendChart" class="plot"></canvas>
+</div>
 
 <script>
 /* ---------- constantes ---------- */
@@ -146,6 +224,12 @@ const MONTHS_FR = {
 /* Palette : 8 couleurs */
 const palette = ["#4b8bf4","#2ecc71","#f1c40f","#9b59b6","#e67e22","#16a085","#d35400","#7f8c8d"];
 const RED = "#e74c3c";
+
+/* Couleurs par classe (1 à 9) */
+const CLASS_COLOR_MAP = {
+  "1":"#e74c3c","2":"#d35400","3":"#e67e22","4":"#f1c40f",
+  "5":"#ffeb3b","6":"#bfc531","7":"#2ecc71","8":"#3498db","9":"#2c3e50"
+};
 
 /* ---------- éléments DOM ---------- */
 const fileInput      = document.getElementById('csvFile');
@@ -279,12 +363,14 @@ function refresh(){
         datasets: [{
           label: `Nombre d'essais par classe – ${sel}`,
           data: orderedClasses.map(k => classCounts[k]),
-          backgroundColor: palette[1]
+          backgroundColor: orderedClasses.map(k => CLASS_COLOR_MAP[k] || palette[1])
         }]
       },
       options: {
         responsive: true,
-        scales: { y: { beginAtZero: true } }
+        scales: {
+          y: { beginAtZero: true }
+        }
       }
     }
   ));
@@ -311,15 +397,17 @@ function refresh(){
         datasets:[
           { label:'Classe moyenne',
             data: clsAvg,
-            backgroundColor: palette[2] },
+            backgroundColor: '#bdc3c7' },
           { label:'Classe maximale',
             data: clsMax,
-            backgroundColor: RED }
+            backgroundColor: clsMax.map(v => CLASS_COLOR_MAP[v] || RED) }
         ]
       },
-      options:{
-        responsive:true,
-        scales:{ y:{ beginAtZero:true } }
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true }
+        }
       }
   }));
 
@@ -332,14 +420,16 @@ function refresh(){
         datasets:[
           { label:'Essais',
             data: attempts,
-            backgroundColor: palette[3] }
+            backgroundColor: exLabels.map(k => CLASS_COLOR_MAP[byEx[k].max.toString()] || palette[3]) }
         ]
       },
-      options:{
-        responsive:true,
-        scales:{ y:{ beginAtZero:true } }
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true }
+        }
       }
-  }));
+  })); 
 
     /* ---------- radar par catégorie ---------- */
     const byCat = {};
@@ -396,6 +486,36 @@ function refresh(){
                         backgroundColor:palette[5]}]},
       options:{responsive:true}
   }));
+
+  // Tests par jour – Moyenne mobile 7 jours
+  const datesTrend = Object.keys(byDay).sort();
+  const windowSizeTrend = 7;
+  const movingAvgTrend = datesTrend.map((date, i) => {
+    const slice = datesTrend.slice(Math.max(0, i - windowSizeTrend + 1), i + 1);
+    const sum = slice.reduce((s, d) => s + byDay[d], 0);
+    return +(sum / slice.length).toFixed(2);
+  });
+  charts.push(new Chart(
+    document.getElementById('testsTrendChart'), {
+      type: 'line',
+      data: {
+        labels: datesTrend.map(d => new Date(d).toLocaleDateString('fr-FR')),
+        datasets: [{
+          label: 'Moyenne mobile 7 jours',
+          data: movingAvgTrend,
+          borderColor: palette[2],
+          backgroundColor: palette[2] + "33",
+          tension: .25,
+          pointRadius: 2,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true } }
+      }
+    }
+  ));
 
   // /* Répartition tests par exercice */
   // charts.push(newPie(
